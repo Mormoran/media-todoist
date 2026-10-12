@@ -8,7 +8,9 @@ Personal watchlist: films, series and anime with posters, where each one streams
 npm start          # serves the folder at http://localhost:8080
 ```
 
-Or enable GitHub Pages on `main` and open the Pages URL. Opening `index.html` as a file does not work because the browser blocks loading the JSON.
+Or open the GitHub Pages build, which updates on every push to `main`: https://mormoran.github.io/media-todoist/
+
+Opening `index.html` as a file does not work because the browser blocks loading the JSON.
 
 ## Add something to watch
 
