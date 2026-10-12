@@ -1,0 +1,14 @@
+{
+  "name": "media-todoist",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal watchlist: films, series and anime with posters, availability and progress.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "npx --yes serve -l 8080 .",
+    "add": "node scripts/add.mjs",
+    "posters": "node scripts/fetch-posters.mjs",
+    "posters:force": "node scripts/fetch-posters.mjs --force"
+  }
+}

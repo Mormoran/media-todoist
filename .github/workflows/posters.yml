@@ -1,0 +1,37 @@
+# When data/watchlist.json changes (for example after editing it on github.com
+# or pushing an `npm run add`), fetch posters for any entry that has none and
+# commit them back.
+name: Fetch missing posters
+
+on:
+  push:
+    branches: [main]
+    paths: ['data/watchlist.json']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: posters
+  cancel-in-progress: false
+
+jobs:
+  posters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/fetch-posters.mjs
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      - name: Commit posters
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/watchlist.json posters
+          git diff --cached --quiet && echo "nothing new" && exit 0
+          git commit -m "chore: fetch posters for new entries"
+          git push
