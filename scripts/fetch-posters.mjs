@@ -63,6 +63,7 @@ const list = loadList();
 let done = 0, failed = [];
 for (const e of list) {
   if (onlyId != null && e.id !== onlyId) continue;
+  if (e.poster_source === 'skip' && !fromUrl) continue; // set "poster_source": "skip" to stop retrying a title
   if (e.poster && !force) continue;
   process.stdout.write(`#${e.id} ${e.title}\n`);
   const c = await candidates(e);

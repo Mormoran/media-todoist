@@ -27,6 +27,12 @@ jobs:
       - run: node scripts/fetch-posters.mjs
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      - name: Shrink new posters
+        run: |
+          sudo apt-get install -y -qq imagemagick >/dev/null
+          for f in $(git ls-files --others --exclude-standard posters); do
+            mogrify -resize '500x>' -quality 75 "$f"
+          done
       - name: Commit posters
         run: |
           git config user.name "github-actions[bot]"

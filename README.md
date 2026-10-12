@@ -40,7 +40,7 @@ node scripts/fetch-posters.mjs --id 95 --from https://…/poster.jpg   # set one
 
 Sources, in order: the entry's own Wikipedia or MyAnimeList link, AniList, TMDB, then a Wikipedia title search. TMDB is optional and only used when `TMDB_API_KEY` is set (locally in the shell, in Actions as a repository secret). It helps for films and series that have no Wikipedia page.
 
-Posters are stored in `posters/<id>.jpg` and shrunk to 500px wide to keep the repo small.
+Posters are stored in `posters/<id>.jpg` and shrunk to 500px wide to keep the repo small. If a title keeps getting the wrong poster, set its `"poster_source": "skip"` and it is left alone until you pass `--from`.
 
 ## Data
 
