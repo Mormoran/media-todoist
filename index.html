@@ -189,6 +189,9 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
 .res b { display: block; font-size: 13.5px; }
 .res span { font-family: var(--font-m); font-size: 11px; color: var(--muted); }
 .form-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px; }
+.steps { margin: 14px 0 16px; padding-left: 20px; font-size: 13.5px; line-height: 1.55; }
+.steps li + li { margin-top: 6px; }
+.btn.on::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); }
 .hint { font-size: 12px; color: var(--muted); }
 
 @media (max-width: 760px) {
@@ -256,6 +259,8 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
         <button class="btn sm" id="exp" type="button">Export my progress</button>
         <button class="btn sm" id="imp" type="button">Import progress</button>
         <button class="btn sm" id="expadd" type="button">Export my additions</button>
+        <button class="btn sm" id="ghbtn" type="button">Connect GitHub</button>
+        <button class="btn sm" id="ghpush" type="button" hidden>Push local additions</button>
         <input type="file" id="impfile" accept="application/json" hidden>
         <span class="count" id="count" aria-live="polite"></span>
       </div>
@@ -266,10 +271,26 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
   <div class="grid" id="grid"></div>
   <p class="empty" id="empty" hidden>// nothing matches those filters</p>
 
-  <p class="foot">Green dot: included in a subscription you pay for in Ireland. Amber: a news source said so, check it. Grey: not checked. Red: not on your services. Availability was researched on 12 Oct 2026 and catalogues change monthly. Additions made here live in this browser; to make them permanent run <code>npm run add -- "Title"</code> in the repo, or export them and paste into <code>data/watchlist.json</code>.</p>
+  <p class="foot">Green dot: included in a subscription you pay for in Ireland. Amber: a news source said so, check it. Grey: not checked. Red: not on your services. Availability was researched on 12 Oct 2026 and catalogues change monthly. Press <b>Data → Connect GitHub</b> once per browser and additions, removals and progress commit straight to the repo. Without it they stay in this browser, and <code>npm run add -- "Title"</code> still works from the terminal.</p>
 </div>
 
 <dialog id="detail"><div class="sheet" id="sheet"></div></dialog>
+<dialog id="ghdlg"><div class="sheet" style="grid-template-columns:1fr;max-width:600px;margin-inline:auto">
+  <button class="x" type="button" data-close aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  <div>
+    <h2>Save to GitHub</h2>
+    <p class="meta">With a token, additions and progress commit straight to the repo and follow you to every device.</p>
+    <ol class="steps">
+      <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com → Settings → Fine-grained tokens → Generate</a>.</li>
+      <li>Repository access: <b>Only select repositories</b> → this repo. Permissions: <b>Contents: Read and write</b>. Nothing else.</li>
+      <li>Expiration: as long as GitHub allows. Paste the token here. It stays in this browser only.</li>
+    </ol>
+    <form class="add" id="ghform" autocomplete="off">
+      <label>Token<span class="field"><input id="gh-token" type="password" placeholder="github_pat_…" autocomplete="off"></span></label>
+      <div class="form-foot"><button class="btn primary" type="submit">Connect</button><button class="btn" type="button" id="ghforget" hidden>Forget token</button><span class="hint" id="ghhint"></span></div>
+    </form>
+  </div>
+</div></dialog>
 <dialog id="adddlg"><div class="sheet" style="grid-template-columns:1fr;max-width:640px;margin-inline:auto">
   <button class="x" type="button" data-close aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   <div>
@@ -302,7 +323,8 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
   var SERVICES = ['Netflix', 'Prime Video', 'Disney+', 'Apple TV+', 'Crunchyroll'];
   var STATUSES = ['To watch', 'Watching', 'Watched', 'Watched?', 'Dropped'];
   var PRIO = ['', 'High', 'Medium', 'Low'];
-  var K_STATE = 'mt-state-v1', K_CUSTOM = 'mt-custom-v1';
+  var K_STATE = 'mt-state-v1', K_CUSTOM = 'mt-custom-v1', K_TOKEN = 'mt-gh-token';
+  var GH = { owner: 'Mormoran', repo: 'media-todoist', branch: 'main' };
   var DATA = [], CUSTOM = [], state = {}, cards = {};
   var VOCAB = { categories: [], groups: [], tags: [] }, TAGLABEL = {};
   var f = { where: 'all', type: 'all', genre: 'all', tags: [], status: 'all', hide18: false, q: '', sort: 'noted' };
@@ -424,9 +446,19 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
       var del = el('button', 'danger', 'Remove this addition'); del.type = 'button';
       del.addEventListener('click', function () {
         CUSTOM = CUSTOM.filter(function (x) { return x.id !== d.id; }); save(K_CUSTOM, CUSTOM);
-        delete cards[d.id]; dlg.close(); stats(); render(); msg('Removed ' + d.title + '.');
+        delete cards[d.id]; dlg.close(); ghUi(); stats(); render(); msg('Removed ' + d.title + '.');
       });
       body.appendChild(del);
+    } else if (token()) {
+      var rm = el('button', 'danger', 'Remove from the list (commits to GitHub)'); rm.type = 'button';
+      rm.addEventListener('click', function () {
+        if (!window.confirm('Remove "' + d.title + '" from data/watchlist.json?')) return;
+        dlg.close(); msg('Removing ' + d.title + '…');
+        removeEntry(d.id, d.title).then(function () {
+          DATA = DATA.filter(function (x) { return x.id !== d.id; }); delete cards[d.id]; buildTags(); stats(); render(); msg('Removed ' + d.title + ' from the repo.');
+        }).catch(function (e) { msg('Remove failed: ' + e.message); });
+      });
+      body.appendChild(rm);
     }
     sheet.appendChild(body);
     dlg.showModal();
@@ -434,9 +466,102 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
   dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
 
   function change(d, key, val) {
-    var v = cur(d); v[key] = val; state[d.id] = v;
+    var v = cur(d); v[key] = val; v.t = Date.now(); state[d.id] = v;
     save(K_STATE, state); refreshCard(d); stats(); if (f.sort === 'prio' || f.status !== 'all') render();
+    queueProgress();
   }
+
+  // ------------------------------------------------------------- github api
+  function token() { try { return localStorage.getItem(K_TOKEN) || ''; } catch (e) { return ''; } }
+  function ghFetch(path, opts) {
+    opts = opts || {};
+    var h = { accept: 'application/vnd.github+json', authorization: 'Bearer ' + token(), 'X-GitHub-Api-Version': '2022-11-28' };
+    if (opts.body) h['content-type'] = 'application/json';
+    return fetch('https://api.github.com/repos/' + GH.owner + '/' + GH.repo + path, { method: opts.method || 'GET', headers: h, body: opts.body ? JSON.stringify(opts.body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.message || ('HTTP ' + r.status)); return j; }); });
+  }
+  function utf8b64(s) { return btoa(unescape(encodeURIComponent(s))); }
+  function b64utf8(s) { return decodeURIComponent(escape(atob(s.replace(/\n/g, '')))); }
+  function ghRead(file) {
+    return ghFetch('/contents/' + file + '?ref=' + GH.branch + '&t=' + Date.now())
+      .then(function (j) { return { sha: j.sha, data: JSON.parse(b64utf8(j.content)) }; })
+      .catch(function (e) { if (/not found/i.test(e.message)) return { sha: null, data: null }; throw e; });
+  }
+  function ghWrite(file, data, sha, message) {
+    var body = { message: message, content: utf8b64(JSON.stringify(data, null, 2) + '\n'), branch: GH.branch };
+    if (sha) body.sha = sha;
+    return ghFetch('/contents/' + file, { method: 'PUT', body: body });
+  }
+  // read-modify-write, one retry if someone else committed in between
+  function ghUpdate(file, message, mutate, retried) {
+    return ghRead(file).then(function (r) { var d = mutate(r.data); return ghWrite(file, d, r.sha, message).then(function () { return d; }); })
+      .catch(function (e) { if (!retried && /409|conflict|does not match/i.test(e.message)) return ghUpdate(file, message, mutate, true); throw e; });
+  }
+  function cleanEntry(d) { var c = Object.assign({}, d); delete c.custom; return c; }
+  function commitEntries(entries) {
+    var out = [];
+    return ghUpdate('data/watchlist.json', entries.length === 1 ? 'add: ' + entries[0].title : 'add: ' + entries.length + ' titles from the site', function (list) {
+      list = list || []; out = [];
+      var next = list.reduce(function (m, x) { return Math.max(m, x.id); }, 0);
+      entries.forEach(function (e) { var c = cleanEntry(e); c.id = ++next; list.push(c); out.push(c); });
+      return list;
+    }).then(function () { return out; });
+  }
+  function removeEntry(id, title) {
+    return ghUpdate('data/watchlist.json', 'remove: ' + title, function (list) { return (list || []).filter(function (x) { return x.id !== id; }); });
+  }
+  // progress: debounced commit of data/progress.json, newest timestamp wins per title
+  var progTimer = null, progDirty = false;
+  function mergeProgress(a, b) {
+    var out = {};
+    Object.keys(a).concat(Object.keys(b)).forEach(function (k) {
+      var x = a[k], y = b[k];
+      out[k] = !x ? y : !y ? x : (y.t || 0) >= (x.t || 0) ? y : x;
+    });
+    return out;
+  }
+  function queueProgress() { if (!token()) return; progDirty = true; clearTimeout(progTimer); progTimer = setTimeout(pushProgress, 4000); }
+  function pushProgress() {
+    if (!progDirty || !token()) return; progDirty = false;
+    ghUpdate('data/progress.json', 'progress: update', function (remote) { return mergeProgress(remote || {}, state); })
+      .then(function (m) { state = m; save(K_STATE, state); })
+      .catch(function (e) { progDirty = true; msg('Progress sync failed: ' + e.message); });
+  }
+  window.addEventListener('beforeunload', function () { if (progDirty) pushProgress(); });
+  function ghUi() {
+    var on = !!token();
+    $('ghbtn').textContent = on ? 'GitHub connected' : 'Connect GitHub';
+    $('ghbtn').className = 'btn sm' + (on ? ' on' : '');
+    $('ghpush').hidden = !(on && CUSTOM.length);
+    $('ghpush').textContent = 'Push ' + CUSTOM.length + ' local addition' + (CUSTOM.length === 1 ? '' : 's');
+    $('ghforget').hidden = !on;
+  }
+  var ghdlg = $('ghdlg');
+  $('ghbtn').addEventListener('click', function () { $('gh-token').value = ''; $('ghhint').textContent = token() ? 'Connected. Paste a new token to replace it.' : ''; ghdlg.showModal(); });
+  ghdlg.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', function () { ghdlg.close(); }); });
+  ghdlg.addEventListener('click', function (e) { if (e.target === ghdlg) ghdlg.close(); });
+  $('ghform').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var t = $('gh-token').value.trim(); if (!t) return;
+    $('ghhint').textContent = 'Checking…';
+    try { localStorage.setItem(K_TOKEN, t); } catch (err) { $('ghhint').textContent = 'This browser blocks storage.'; return; }
+    ghFetch('').then(function (j) {
+      if (!j.permissions || !j.permissions.push) throw new Error('token has no write access to ' + GH.repo);
+      $('ghhint').textContent = ''; ghUi(); ghdlg.close(); msg('GitHub connected. Additions and progress now commit to the repo.');
+      queueProgress();
+    }).catch(function (err) { try { localStorage.removeItem(K_TOKEN); } catch (x) {} ghUi(); $('ghhint').textContent = 'Rejected: ' + err.message; });
+  });
+  $('ghforget').addEventListener('click', function () { try { localStorage.removeItem(K_TOKEN); } catch (x) {} ghUi(); ghdlg.close(); msg('Token forgotten. Back to browser-only saving.'); });
+  $('ghpush').addEventListener('click', function () {
+    if (!CUSTOM.length) return;
+    msg('Pushing ' + CUSTOM.length + ' to GitHub…');
+    commitEntries(CUSTOM).then(function (added) {
+      added.forEach(function (c) { DATA.push(c); });
+      CUSTOM.forEach(function (c) { delete cards[c.id]; });
+      CUSTOM = []; save(K_CUSTOM, CUSTOM); ghUi(); buildTags(); stats(); render();
+      msg('Pushed ' + added.length + ' to the repo. Posters arrive in a couple of minutes.');
+    }).catch(function (e) { msg('Push failed: ' + e.message); });
+  });
 
   // ------------------------------------------------------------------ stats
   function stats() {
@@ -652,9 +777,21 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
       content: 'none', services: [], availability: 'unknown', url: $('a-url').value || null, match_confidence: picked ? 'high' : 'medium',
       notes: $('a-note').value.trim(), probably_watched: false, noted_on: new Date().toISOString().slice(0, 10),
       poster: $('a-poster').value.trim() || null, poster_source: $('a-poster').value.trim() ? 'url' : null, custom: true };
-    CUSTOM.push(d); if (save(K_CUSTOM, CUSTOM)) msg('Added ' + d.title + '. It lives in this browser until you export it or add it with the CLI.');
-    adddlg.close(); f.sort = 'added'; $('sort').value = 'added'; buildTags(); renderTagSel(); stats(); render();
-    setTimeout(function () { var c = cards[d.id]; if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
+    adddlg.close();
+    function show(entry) {
+      f.sort = 'added'; $('sort').value = 'added'; buildTags(); renderTagSel(); stats(); render();
+      setTimeout(function () { var c = cards[entry.id]; if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
+    }
+    function keepLocal(why) {
+      CUSTOM.push(d); if (save(K_CUSTOM, CUSTOM)) msg(why || ('Added ' + d.title + '. It lives in this browser until you connect GitHub (Data button) or add it with the CLI.'));
+      ghUi(); show(d);
+    }
+    if (!token()) return keepLocal();
+    msg('Saving ' + d.title + ' to GitHub…');
+    commitEntries([d]).then(function (added) {
+      var c = added[0]; DATA.push(c); show(c);
+      msg('Saved ' + c.title + ' to the repo as #' + c.id + '. The poster lands in a couple of minutes.');
+    }).catch(function (e) { keepLocal('GitHub save failed (' + e.message + '). Kept ' + d.title + ' in this browser instead.'); });
   });
 
   // ------------------------------------------------------------------- boot
@@ -667,11 +804,15 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
   $('asof').textContent = new Date().toLocaleDateString('en-IE', { day: '2-digit', month: 'short', year: 'numeric' });
 
   function getJson(u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
-  Promise.all([getJson('data/watchlist.json'), getJson('data/tags.json').catch(function () { return VOCAB; })])
+  ghUi();
+  Promise.all([getJson('data/watchlist.json'), getJson('data/tags.json').catch(function () { return VOCAB; }), getJson('data/progress.json').catch(function () { return {}; })])
     .then(function (r) {
       DATA = r[0]; VOCAB = r[1];
+      state = mergeProgress(r[2] || {}, state); save(K_STATE, state);
       VOCAB.tags.forEach(function (t) { TAGLABEL[t.id] = t.label; var o = el('option'); o.value = t.id; o.label = t.label; $('taglist').appendChild(o); });
       buildTags(); stats(); render();
+      // the published progress.json can lag a minute behind; with a token, read the live one too
+      if (token()) ghRead('data/progress.json').then(function (x) { if (x.data) { state = mergeProgress(x.data, state); save(K_STATE, state); all().forEach(refreshCard); stats(); } }).catch(function () {});
     })
     .catch(function () {
       DATA = []; stats(); render();

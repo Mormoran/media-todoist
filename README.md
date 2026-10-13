@@ -27,7 +27,9 @@ npm run add -- "Alien: Earth" --kind series --tags "aliens,corporate" --genres "
 git add -A && git commit -m "add Frieren" && git push
 ```
 
-**On the site**: the **Add** button looks the title up (AniList for anime, Wikipedia otherwise) and stores the entry in your browser. Use **Data → Export my additions** and paste the objects into `data/watchlist.json` to make them permanent. Pushing that file triggers the poster workflow.
+**On the site**: the **Add** button looks the title up (AniList for anime, Wikipedia otherwise). Press **Data → Connect GitHub** once per browser and paste a fine-grained personal access token (only this repo, permission Contents: read and write). From then on additions, removals and your progress commit straight to the repo through the GitHub API, the poster workflow runs, and progress follows you to other devices via `data/progress.json`. Without a token, entries stay in that browser; **Data → Export my additions** or **Push local additions** (after connecting) moves them over.
+
+GitHub Pages serves static files only, so there is no server to write to. The token is the whole backend. It lives in the browser's localStorage, so forget it from the same dialog on a shared machine.
 
 **On github.com**: edit `data/watchlist.json` directly. The workflow fetches the poster and commits it.
 

@@ -21,6 +21,8 @@ if (fromUrl && onlyId == null) { console.error('--from needs --id'); process.exi
 async function candidates(e) {
   const out = [];
   if (fromUrl) return [{ source: 'manual', img: fromUrl }];
+  // the site stores a remote URL in `poster` when it adds a title; download it
+  if (/^https?:/.test(e.poster || '')) return [{ source: e.poster_source || 'url', img: e.poster }];
   const tryAdd = async (source, fn) => {
     try {
       const img = await fn();
@@ -64,7 +66,7 @@ let done = 0, failed = [];
 for (const e of list) {
   if (onlyId != null && e.id !== onlyId) continue;
   if (e.poster_source === 'skip' && !fromUrl) continue; // set "poster_source": "skip" to stop retrying a title
-  if (e.poster && !force) continue;
+  if (e.poster && !/^https?:/.test(e.poster) && !force) continue;
   process.stdout.write(`#${e.id} ${e.title}\n`);
   const c = await candidates(e);
   let ok = false;
