@@ -5,9 +5,11 @@
 // Sources, in order: the entry's own Wikipedia or MyAnimeList link, AniList
 // (anime), TMDB (if TMDB_API_KEY is set), then a Wikipedia title search.
 import {
-  loadList, saveList, sleep, isAnime,
+  loadList, saveList, sleep, isAnime, isManga, isBook,
   wikiTitleFromUrl, wikiSummary, wikiSearch,
   malIdFromUrl, anilistByMal, anilistSearch, anilistImage, malOgImage,
+  malMangaIdFromUrl, anilistMangaByMal, anilistMangaSearch,
+  openLibraryKeyFromUrl, openLibraryWork, openLibrarySearch,
   tmdbSearch, downloadImage,
 } from './lib.mjs';
 
@@ -32,6 +34,18 @@ async function candidates(e) {
     }
   };
 
+  if (isBook(e.kind)) {
+    const key = openLibraryKeyFromUrl(e.url);
+    if (key) await tryAdd('openlibrary', async () => (await openLibraryWork(key)).image);
+    if (!out.length) await tryAdd('openlibrary-search', async () => (await openLibrarySearch(e.title, 1))[0]?.image);
+    return out;
+  }
+  if (isManga(e.kind)) {
+    const mid = malMangaIdFromUrl(e.url);
+    if (mid) await tryAdd('anilist', async () => anilistImage(await anilistMangaByMal(mid)));
+    if (!out.length) await tryAdd('anilist-search', async () => anilistImage((await anilistMangaSearch(e.title, 1))[0]));
+    return out;
+  }
   const wikiTitle = wikiTitleFromUrl(e.url);
   const malId = malIdFromUrl(e.url);
   if (wikiTitle) await tryAdd('wikipedia', async () => (await wikiSummary(wikiTitle)).image);

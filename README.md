@@ -1,6 +1,6 @@
 # media-todoist
 
-Personal watchlist: films, series and anime with posters, where each one streams in Ireland, and your own progress. Static site, no build step, no dependencies.
+Personal watchlist: films, series, anime, manga and books with posters, where each one streams in Ireland, and your own progress. Static site, no build step, no dependencies.
 
 ## Run it
 
@@ -24,10 +24,13 @@ npm run add -- "Frieren" --pick 2                     # take the 2nd match inste
 npm run add -- "Thing" --url https://en.wikipedia.org/wiki/Thing
 npm run add -- "Thing" --manual                       # no lookup
 npm run add -- "Alien: Earth" --kind series --tags "aliens,corporate" --genres "Sci-fi,Horror"
+npm run add -- "Berserk" --kind manga                 # AniList manga, light novels, webtoons
+npm run add -- "Dune" --kind book --author "Frank Herbert"   # Open Library
+npm run add -- "Gantz" --date 2026-03-20 --note "from a reel"  # when you noted it
 git add -A && git commit -m "add Frieren" && git push
 ```
 
-**On the site**: sign in with Google, then the **Add** button looks the title up (AniList for anime, Wikipedia otherwise) and writes it to Firestore. Status, priority and rating save there too and sync live to every device you are signed in on. Signed out, the page shows the repo's `data/watchlist.json` read-only.
+**On the site**: sign in with Google, then the **Add** button looks the title up (AniList for anime and manga, Open Library for books, Wikipedia otherwise) and writes it to Firestore. Status, priority and rating save there too and sync live to every device you are signed in on. Signed out, the page shows the repo's `data/watchlist.json` read-only.
 
 ## Backend: Firebase
 
@@ -55,7 +58,7 @@ npm run posters:force                                  # redo all
 node scripts/fetch-posters.mjs --id 95 --from https://…/poster.jpg   # set one by hand
 ```
 
-Sources, in order: the entry's own Wikipedia or MyAnimeList link, AniList, TMDB, then a Wikipedia title search. TMDB is optional and only used when `TMDB_API_KEY` is set (locally in the shell, in Actions as a repository secret). It helps for films and series that have no Wikipedia page.
+Sources, in order: the entry's own Wikipedia or MyAnimeList link, AniList, TMDB, then a Wikipedia title search. Manga use AniList, books use Open Library covers. TMDB is optional and only used when `TMDB_API_KEY` is set (locally in the shell, in Actions as a repository secret). It helps for films and series that have no Wikipedia page.
 
 Posters are stored in `posters/<id>.jpg` and shrunk to 500px wide to keep the repo small. If a title keeps getting the wrong poster, set its `"poster_source": "skip"` and it is left alone until you pass `--from`.
 
@@ -67,8 +70,9 @@ Posters are stored in `posters/<id>.jpg` and shrunk to 500px wide to keep the re
 | --- | --- |
 | `id` | unique number, never reused |
 | `title`, `noted_as` | canonical title, and what you originally wrote |
-| `kind` | `Movie`, `TV series`, `Miniseries`, `Anime series`, `Anime movie`, `OVA/ONA`, `Other` |
+| `kind` | `Movie`, `TV series`, `Miniseries`, `Anime series`, `Anime movie`, `OVA/ONA`, `Manga`, `Light novel`, `Book`, `Other` |
 | `year`, `episodes`, `seasons`, `runtime_min` | per episode for series |
+| `author`, `chapters`, `volumes`, `pages` | manga and books only |
 | `release_status` | `Finished`, `Ongoing`, `Upcoming`, `Unknown` |
 | `genres` | broad categories from `data/tags.json` (Sci-fi, Fantasy, Crime, ...) |
 | `tags` | granular tags from `data/tags.json` (aliens, heist, medieval, isekai, cozy, ...). The site filters with AND, so picking "space" and "military" narrows to both. |

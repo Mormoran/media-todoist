@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Watchlist</title>
-<meta name="description" content="Films, series and anime to watch, with posters, availability in Ireland and your own progress.">
+<meta name="description" content="Films, series, anime, manga and books to watch, with posters, availability in Ireland and your own progress.">
 <meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -134,6 +134,7 @@ h1 .neon { background: var(--neon); -webkit-background-clip: text; background-cl
 .frame .tile { display: flex; flex-direction: column; justify-content: space-between; padding: 12px; color: #fff; background: linear-gradient(160deg, #2a3150, #141829); }
 .frame .tile.anime { background: linear-gradient(160deg, #0d6f8f, #0a2f45); }
 .frame .tile.series { background: linear-gradient(160deg, #6a3fb0, #2a1a52); }
+.frame .tile.read { background: linear-gradient(160deg, #b0334f, #4a1424); }
 .frame .tile .ini { font-size: 44px; font-weight: 700; line-height: 0.9; letter-spacing: -0.04em; }
 .frame .tile .yr { font-family: var(--font-m); font-size: 11px; opacity: 0.8; }
 .frame::after { content: ""; position: absolute; inset: 7px; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), inset 0 -40px 50px -30px rgba(20, 24, 41, 0.45); pointer-events: none; }
@@ -229,7 +230,7 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
     <div>
       <p class="kicker"><span class="dot"></span>Watchlist · Ireland · <span id="asof" class="mono"></span></p>
       <h1>Things to <span class="neon">watch</span><br>later.</h1>
-      <p class="sub">Films, series and anime with posters and where each one streams. Sign in with Google and everything you add or rate is stored in Firestore and follows you to every device.</p>
+      <p class="sub">Films, series, anime, manga and books with posters and where each one streams. Sign in with Google and everything you add or rate is stored in Firestore and follows you to every device.</p>
     </div>
     <ul class="stats" id="stats" aria-label="Summary"></ul>
   </header>
@@ -301,9 +302,9 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
     <form class="add" id="addform" autocomplete="off">
       <div class="g2">
         <label>Title<span class="field"><input id="a-title" required placeholder="Frieren, Dune, Severance"></span></label>
-        <label>Type<span class="sel" style="height:44px;border-radius:14px;width:100%"><select id="a-kind" style="width:100%"><option value="Anime series">Anime series</option><option value="Anime movie">Anime movie</option><option value="Movie">Movie</option><option value="TV series">TV series</option><option value="Miniseries">Miniseries</option><option value="Other">Other</option></select></span></label>
+        <label>Type<span class="sel" style="height:44px;border-radius:14px;width:100%"><select id="a-kind" style="width:100%"><option value="Anime series">Anime series</option><option value="Anime movie">Anime movie</option><option value="Movie">Movie</option><option value="TV series">TV series</option><option value="Miniseries">Miniseries</option><option value="Manga">Manga</option><option value="Light novel">Light novel</option><option value="Book">Book</option><option value="Other">Other</option></select></span></label>
       </div>
-      <div class="form-foot"><button class="btn sm" type="button" id="lookup">Look up</button><span class="hint" id="lookhint">AniList for anime, Wikipedia for everything else.</span></div>
+      <div class="form-foot"><button class="btn sm" type="button" id="lookup">Look up</button><span class="hint" id="lookhint">AniList for anime and manga, Open Library for books, Wikipedia for the rest.</span></div>
       <div class="results" id="results"></div>
       <div class="g2">
         <label>Year<span class="field"><input id="a-year" inputmode="numeric" placeholder="2024"></span></label>
@@ -361,9 +362,10 @@ function cur(d) {
   const s = CLOUD ? d : Object.assign({}, d, localState()[d.id] || {});
   return { status: s.status || (d.probably_watched ? 'Watched?' : 'To watch'), priority: s.priority || '', rating: s.rating || '' };
 }
-function group(d) { const k = d.kind || ''; if (/anime|OVA|ONA/i.test(k)) return 'anime'; if (/series/i.test(k)) return 'series'; return 'film'; }
+function group(d) { const k = d.kind || ''; if (/book|manga|novel|webtoon/i.test(k)) return 'read'; if (/anime|OVA|ONA/i.test(k)) return 'anime'; if (/series/i.test(k)) return 'series'; return 'film'; }
+function isRead(d) { return group(d) === 'read'; }
 function minutes(d) { if (!d.runtime_min) return null; return d.episodes ? d.episodes * d.runtime_min : d.runtime_min; }
-function jw(d) { return 'https://www.justwatch.com/ie/search?q=' + encodeURIComponent(d.title); }
+function jw(d) { return isRead(d) ? 'https://www.goodreads.com/search?q=' + encodeURIComponent(d.title) : 'https://www.justwatch.com/ie/search?q=' + encodeURIComponent(d.title); }
 function initial(d) { return (d.title.replace(/^(The|A|An)\s+/i, '').charAt(0) || '?').toUpperCase(); }
 function statusClass(s) { return s === 'Watched' ? 'w' : s === 'Watching' ? 'g' : s === 'Dropped' ? 'd' : s === 'Watched?' ? 'q' : ''; }
 function posterUrl(d) { if (!d.poster) return null; return /^https?:/.test(d.poster) ? d.poster : POSTER_BASE + d.poster; }
@@ -394,6 +396,7 @@ function metaShort(d) {
   if (d.year) p.push(d.year);
   if (d.episodes) p.push(d.episodes + ' ep'); else if (d.runtime_min) p.push(d.runtime_min + ' min');
   if (d.seasons && d.seasons > 1) p.push(d.seasons + ' S');
+  if (d.chapters) p.push(d.chapters + ' ch'); else if (d.volumes) p.push(d.volumes + ' vol'); else if (d.pages) p.push(d.pages + ' p');
   return p.join(' · ') || (d.kind || '');
 }
 function makeCard(d) {
@@ -435,11 +438,12 @@ function openDetail(id) {
   const body = el('div');
   body.appendChild(el('h2', null, d.title));
   const meta = el('p', 'meta');
-  [d.kind, d.year, d.episodes ? d.episodes + ' episodes' + (d.runtime_min ? ' × ' + d.runtime_min + ' min' : '') : d.runtime_min ? d.runtime_min + ' min' : null, d.seasons && d.seasons > 1 ? d.seasons + ' seasons' : null, d.release_status && d.release_status !== 'Unknown' ? d.release_status : null, minutes(d) ? '≈ ' + Math.round(minutes(d) / 60 * 10) / 10 + ' h total' : null]
+  [d.kind, d.author, d.year, d.chapters ? d.chapters + ' chapters' : null, d.volumes ? d.volumes + ' volumes' : null, d.pages ? d.pages + ' pages' : null, d.episodes ? d.episodes + ' episodes' + (d.runtime_min ? ' × ' + d.runtime_min + ' min' : '') : d.runtime_min ? d.runtime_min + ' min' : null, d.seasons && d.seasons > 1 ? d.seasons + ' seasons' : null, d.release_status && d.release_status !== 'Unknown' ? d.release_status : null, minutes(d) ? '≈ ' + Math.round(minutes(d) / 60 * 10) / 10 + ' h total' : null]
     .filter(Boolean).forEach((t) => meta.appendChild(el('span', null, String(t))));
   body.appendChild(meta);
   const b = el('div', 'badges'), sv = d.services || [];
-  if (sv.length) sv.forEach((s) => b.appendChild(el('span', 'badge svc' + (d.availability === 'reported' ? ' rep' : ''), s)));
+  if (isRead(d)) { /* no streaming badge for books and manga */ }
+  else if (sv.length) sv.forEach((s) => b.appendChild(el('span', 'badge svc' + (d.availability === 'reported' ? ' rep' : ''), s)));
   else if (d.availability === 'unknown') b.appendChild(el('span', 'badge unk', 'Not checked'));
   else b.appendChild(el('span', 'badge no', 'Not on your services'));
   (d.genres || []).forEach((g) => b.appendChild(el('span', 'badge', g)));
@@ -458,8 +462,8 @@ function openDetail(id) {
   if (d.probably_watched && cur(d).status === 'Watched?') notes.push('Dropped off the original movie list, so probably watched. Confirm below.');
   if (notes.length) body.appendChild(el('p', 'note', notes.join(' ')));
   const links = el('div', 'links');
-  if (d.url) { const a = el('a', 'btn sm', /myanimelist/.test(d.url) ? 'MyAnimeList' : /wikipedia/.test(d.url) ? 'Wikipedia' : /themoviedb/.test(d.url) ? 'TMDB' : 'Source'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; links.appendChild(a); }
-  const j = el('a', 'btn sm', 'JustWatch IE'); j.href = jw(d); j.target = '_blank'; j.rel = 'noopener'; links.appendChild(j);
+  if (d.url) { const a = el('a', 'btn sm', /myanimelist/.test(d.url) ? 'MyAnimeList' : /wikipedia/.test(d.url) ? 'Wikipedia' : /themoviedb/.test(d.url) ? 'TMDB' : /openlibrary/.test(d.url) ? 'Open Library' : /anilist/.test(d.url) ? 'AniList' : 'Source'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; links.appendChild(a); }
+  const j = el('a', 'btn sm', isRead(d) ? 'Goodreads' : 'JustWatch IE'); j.href = jw(d); j.target = '_blank'; j.rel = 'noopener'; links.appendChild(j);
   body.appendChild(links);
   const ctl = el('div', 'ctl'), v = cur(d);
   [['status', 'Status', STATUSES], ['priority', 'Priority', PRIO], ['rating', 'Rating', ['', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']]].forEach((c) => {
@@ -721,6 +725,25 @@ function lookupAnime(q) {
       synopsis: strip(m.description).slice(0, 600), poster: m.coverImage.extraLarge || m.coverImage.large,
       url: m.idMal ? 'https://myanimelist.net/anime/' + m.idMal : m.siteUrl, sub: (m.seasonYear || '?') + ' · ' + (m.format || '') + ' · ' + (m.episodes || '?') + ' ep' }; }));
 }
+function lookupManga(q) {
+  return fetchJson('https://graphql.anilist.co', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ query: 'query($q:String){Page(perPage:6){media(search:$q,type:MANGA,sort:SEARCH_MATCH){idMal siteUrl title{romaji english} coverImage{extraLarge large} startDate{year} chapters volumes status format genres tags{name rank} description(asHtml:false) staff(perPage:3){edges{role node{name{full}}}}}}}', variables: { q } }) })
+    .then((j) => (j.data.Page.media || []).map((m) => { const mp = mapAnilist(m); const au = (m.staff && m.staff.edges || []).filter((e) => /Story|Art/i.test(e.role)).map((e) => e.node.name.full).filter((v, i, a) => a.indexOf(v) === i).join(', ') || null; return {
+      genres: mp.genres, tags: mp.tags, author: au,
+      title: m.title.english || m.title.romaji, year: m.startDate && m.startDate.year, chapters: m.chapters, volumes: m.volumes,
+      kind: m.format === 'NOVEL' ? 'Light novel' : 'Manga',
+      release_status: m.status === 'FINISHED' ? 'Finished' : m.status === 'RELEASING' ? 'Ongoing' : m.status === 'NOT_YET_RELEASED' ? 'Upcoming' : 'Unknown',
+      synopsis: strip(m.description).slice(0, 600), poster: m.coverImage.extraLarge || m.coverImage.large,
+      url: m.idMal ? 'https://myanimelist.net/manga/' + m.idMal : m.siteUrl, sub: ((m.startDate && m.startDate.year) || '?') + ' · ' + (m.format || '') + ' · ' + (m.chapters || '?') + ' ch' + (au ? ' · ' + au : '') }; }));
+}
+function lookupBook(q) {
+  return fetchJson('https://openlibrary.org/search.json?limit=6&fields=key,title,author_name,first_publish_year,cover_i,number_of_pages_median&q=' + encodeURIComponent(q))
+    .then((j) => (j.docs || []).map((d) => ({
+      title: d.title, author: (d.author_name || []).slice(0, 2).join(', ') || null, year: d.first_publish_year || null, pages: d.number_of_pages_median || null,
+      kind: 'Book', release_status: 'Finished', genres: [], tags: [], synopsis: '',
+      poster: d.cover_i ? 'https://covers.openlibrary.org/b/id/' + d.cover_i + '-L.jpg' : null,
+      url: 'https://openlibrary.org' + d.key, sub: (d.first_publish_year || '?') + (d.author_name ? ' · ' + d.author_name[0] : '') })));
+}
 function lookupWiki(q, kind) {
   const term = q + ' ' + (/series/i.test(kind) ? 'TV series' : 'film');
   return fetchJson('https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=5&srsearch=' + encodeURIComponent(term))
@@ -735,7 +758,7 @@ function lookupWiki(q, kind) {
 $('lookup').addEventListener('click', () => {
   const q = $('a-title').value.trim(), kind = $('a-kind').value; if (!q) return;
   const box = $('results'); box.textContent = ''; $('lookhint').textContent = 'Searching…'; picked = null;
-  (/anime|OVA/i.test(kind) ? lookupAnime(q) : lookupWiki(q, kind)).then((hits) => {
+  (/anime|OVA/i.test(kind) ? lookupAnime(q) : /manga|novel/i.test(kind) ? lookupManga(q) : /book/i.test(kind) ? lookupBook(q) : lookupWiki(q, kind)).then((hits) => {
     $('lookhint').textContent = hits.length ? 'Pick the right one. It fills the form; edit anything after.' : 'No match. Fill the fields yourself.';
     hits.forEach((h) => {
       const b = el('button', 'res'); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
@@ -756,6 +779,7 @@ $('addform').addEventListener('submit', (e) => {
   const id = nextId();
   const d = { id, title, noted_as: title, kind: $('a-kind').value, year: Number($('a-year').value) || null,
     episodes: picked ? picked.episodes || null : null, seasons: null, runtime_min: picked ? picked.runtime_min || null : null,
+    author: picked ? picked.author || null : null, chapters: picked ? picked.chapters || null : null, volumes: picked ? picked.volumes || null : null, pages: picked ? picked.pages || null : null,
     release_status: picked ? picked.release_status || 'Unknown' : 'Unknown', genres: picked ? picked.genres : [], tags: parseTags($('a-tags').value), synopsis: $('a-syn').value.trim(),
     content: 'none', services: [], availability: 'unknown', url: $('a-url').value || null, match_confidence: picked ? 'high' : 'medium',
     notes: $('a-note').value.trim(), probably_watched: false, noted_on: new Date().toISOString().slice(0, 10),
@@ -771,7 +795,7 @@ $('addform').addEventListener('submit', (e) => {
 
 // ------------------------------------------------------------------- boot
 chips('f-where', [['all', 'All'], ['mine', 'On my services'], ['Netflix', 'Netflix'], ['Prime Video', 'Prime Video'], ['Disney+', 'Disney+'], ['Apple TV+', 'Apple TV+'], ['Crunchyroll', 'Crunchyroll'], ['none', 'Not on mine'], ['unk', 'Unchecked']], 'where');
-chips('f-type', [['all', 'All'], ['anime', 'Anime'], ['film', 'Films'], ['series', 'Series']], 'type');
+chips('f-type', [['all', 'All'], ['anime', 'Anime'], ['film', 'Films'], ['series', 'Series'], ['read', 'Books & manga']], 'type');
 chips('f-status', [['all', 'All'], ['To watch', 'To watch'], ['Watching', 'Watching'], ['Watched', 'Watched'], ['Watched?', 'Watched?'], ['Dropped', 'Dropped']], 'status');
 $('q').addEventListener('input', (e) => { f.q = e.target.value.trim().toLowerCase(); render(); });
 $('sort').addEventListener('change', (e) => { f.sort = e.target.value; render(); });

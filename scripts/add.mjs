@@ -5,13 +5,16 @@
 //   node scripts/add.mjs "Frieren" --pick 2                take the 2nd search result
 //   node scripts/add.mjs "Some Title" --url https://en.wikipedia.org/wiki/Some_Title
 //   node scripts/add.mjs "Thing" --manual                  no lookup, just add it
-// Kinds: anime | movie | series (free text also allowed).
+// Kinds: anime | movie | series | manga | book (free text also allowed).
+//   node scripts/add.mjs "Berserk" --kind manga              AniList manga/light novels/webtoons
+//   node scripts/add.mjs "Dune" --kind book --author "Frank Herbert"   Open Library
 // Metadata and a poster come from AniList for anime, otherwise TMDB (if
 // TMDB_API_KEY is set) or Wikipedia. The entry is appended to data/watchlist.json.
 import {
   loadList, saveList, nextId, today, isAnime,
   wikiTitleFromUrl, wikiSummary, wikiSearch,
   anilistSearch, anilistImage, mapAnilist, tmdbSearch, downloadImage, TMDB_KEY, VOCAB,
+  anilistMangaSearch, mangaAuthor, openLibrarySearch, openLibraryWork,
 } from './lib.mjs';
 
 const argv = process.argv.slice(2);
@@ -19,7 +22,9 @@ const flag = (name, dflt = null) => (argv.includes(name) ? argv[argv.indexOf(nam
 const has = (name) => argv.includes(name);
 //   --tags "aliens,space"   granular tags from data/tags.json (added to any AniList ones)
 //   --genres "Sci-fi,Drama" categories from data/tags.json
-const VALUE_FLAGS = ['--kind', '--year', '--note', '--pick', '--url', '--tags', '--genres'];
+//   --date 2026-02-21       when you noted it (default today)
+//   --adult                 mark as 18+ (AniList isAdult sets this too)
+const VALUE_FLAGS = ['--kind', '--year', '--note', '--pick', '--url', '--tags', '--genres', '--author', '--date'];
 let title = null;
 for (let i = 0; i < argv.length; i++) {
   if (VALUE_FLAGS.includes(argv[i])) { i++; continue; }
@@ -41,7 +46,11 @@ const entry = {
   id: nextId(list),
   title,
   noted_as: title,
-  kind: kindArg === 'anime' ? 'Anime series' : kindArg === 'movie' ? 'Movie' : kindArg === 'series' ? 'TV series' : kindArg ? kindArg : 'Unknown',
+  kind: kindArg === 'anime' ? 'Anime series' : kindArg === 'movie' ? 'Movie' : kindArg === 'series' ? 'TV series' : kindArg === 'manga' ? 'Manga' : kindArg === 'book' ? 'Book' : kindArg ? kindArg : 'Unknown',
+  author: flag('--author') || null,
+  chapters: null,
+  volumes: null,
+  pages: null,
   year,
   episodes: null,
   seasons: null,
@@ -50,14 +59,14 @@ const entry = {
   genres: [],
   tags: [],
   synopsis: '',
-  content: 'none',
+  content: has('--adult') ? 'adult' : 'none',
   services: [],
   availability: 'unknown',
   url: forceUrl || null,
   match_confidence: 'high',
   notes: note,
   probably_watched: false,
-  noted_on: today(),
+  noted_on: flag('--date') || today(),
   poster: null,
   poster_source: null,
 };
@@ -67,6 +76,36 @@ let image = null, source = null;
 
 if (has('--manual')) {
   console.log('Manual entry, no lookup.');
+} else if (kindArg === 'manga') {
+  const hits = await anilistMangaSearch(title, 5);
+  if (hits.length) {
+    console.log('AniList manga matches:');
+    hits.forEach((h, i) => console.log(`  ${i + 1}. ${h.title.english || h.title.romaji} (${h.startDate?.year || '?'}, ${h.format}, ${h.chapters || '?'} ch)`));
+    const m = hits[pick] || hits[0];
+    entry.title = m.title.english || m.title.romaji;
+    entry.kind = m.format === 'NOVEL' ? 'Light novel' : 'Manga';
+    entry.year = m.startDate?.year || year;
+    entry.chapters = m.chapters; entry.volumes = m.volumes;
+    entry.author = entry.author || mangaAuthor(m);
+    entry.release_status = m.status === 'FINISHED' ? 'Finished' : m.status === 'RELEASING' ? 'Ongoing' : m.status === 'NOT_YET_RELEASED' ? 'Upcoming' : 'Unknown';
+    const mapped = mapAnilist(m);
+    entry.genres = mapped.genres; entry.tags = mapped.tags;
+    if (m.isAdult) entry.content = 'adult';
+    entry.synopsis = stripHtml(m.description).slice(0, 600);
+    entry.url = m.idMal ? `https://myanimelist.net/manga/${m.idMal}` : m.siteUrl;
+    image = anilistImage(m); source = 'anilist';
+  } else console.log('No AniList manga match. Added as a bare entry.');
+} else if (kindArg === 'book') {
+  const hits = await openLibrarySearch(entry.author ? `${title} ${entry.author}` : title, 5);
+  if (hits.length) {
+    console.log('Open Library matches:');
+    hits.forEach((h, i) => console.log(`  ${i + 1}. ${h.title} - ${h.author || '?'} (${h.year || '?'})`));
+    const m = hits[pick] || hits[0];
+    entry.title = m.title; entry.author = m.author; entry.year = year || m.year; entry.pages = m.pages;
+    entry.url = m.url; entry.release_status = 'Finished';
+    try { const w = await openLibraryWork(m.key); entry.synopsis = w.description.replace(/\*\*|__|\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').slice(0, 600); image = m.image || w.image; } catch { image = m.image; }
+    source = 'openlibrary';
+  } else console.log('No Open Library match. Added as a bare entry.');
 } else if (forceUrl && wikiTitleFromUrl(forceUrl)) {
   const s = await wikiSummary(wikiTitleFromUrl(forceUrl));
   entry.title = s.title; entry.synopsis = s.extract || ''; entry.url = s.url || forceUrl;
@@ -91,6 +130,7 @@ if (has('--manual')) {
       entry.release_status = m.status === 'FINISHED' ? 'Finished' : m.status === 'RELEASING' ? 'Ongoing' : m.status === 'NOT_YET_RELEASED' ? 'Upcoming' : 'Unknown';
       const mapped = mapAnilist(m);
       entry.genres = mapped.genres; entry.tags = mapped.tags;
+      if (m.isAdult) entry.content = 'adult';
       entry.synopsis = stripHtml(m.description).slice(0, 600);
       entry.url = m.idMal ? `https://myanimelist.net/anime/${m.idMal}` : m.siteUrl;
       image = anilistImage(m); source = 'anilist'; matched = true;

@@ -54,7 +54,7 @@ export async function wikiSearch(q, limit = 5) {
 }
 
 // ------------------------------------------------------------------ AniList
-const ANILIST_FIELDS = `id idMal title { romaji english } coverImage { extraLarge large } seasonYear episodes duration status format genres tags { name rank } description(asHtml: false) siteUrl`;
+const ANILIST_FIELDS = `id idMal isAdult title { romaji english } coverImage { extraLarge large } seasonYear episodes duration status format genres tags { name rank } description(asHtml: false) siteUrl`;
 
 // Map AniList genres and tags onto our own vocabulary (data/tags.json).
 export const VOCAB = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'tags.json'), 'utf8'));
@@ -78,6 +78,10 @@ export function malIdFromUrl(url) {
   const m = /myanimelist\.net\/anime\/(\d+)/.exec(url || '');
   return m ? Number(m[1]) : null;
 }
+export function malMangaIdFromUrl(url) {
+  const m = /myanimelist\.net\/manga\/(\d+)/.exec(url || '');
+  return m ? Number(m[1]) : null;
+}
 export async function anilistByMal(idMal) {
   const d = await anilist(`query($m:Int){ Media(idMal:$m, type:ANIME){ ${ANILIST_FIELDS} } }`, { m: idMal });
   return d.Media;
@@ -85,6 +89,43 @@ export async function anilistByMal(idMal) {
 export async function anilistSearch(q, perPage = 5) {
   const d = await anilist(`query($q:String,$n:Int){ Page(perPage:$n){ media(search:$q, type:ANIME, sort:SEARCH_MATCH){ ${ANILIST_FIELDS} } } }`, { q, n: perPage });
   return d.Page.media;
+}
+// Manga, light novels and webtoons. Same fields plus chapters/volumes/author.
+const MANGA_FIELDS = `id idMal isAdult title { romaji english } coverImage { extraLarge large } startDate { year } chapters volumes status format genres tags { name rank } description(asHtml: false) siteUrl staff(perPage: 3) { edges { role node { name { full } } } }`;
+export async function anilistMangaSearch(q, perPage = 5) {
+  const d = await anilist(`query($q:String,$n:Int){ Page(perPage:$n){ media(search:$q, type:MANGA, sort:SEARCH_MATCH){ ${MANGA_FIELDS} } } }`, { q, n: perPage });
+  return d.Page.media;
+}
+export async function anilistMangaByMal(idMal) {
+  const d = await anilist(`query($m:Int){ Media(idMal:$m, type:MANGA){ ${MANGA_FIELDS} } }`, { m: idMal });
+  return d.Media;
+}
+export const mangaAuthor = (m) => (m?.staff?.edges || []).filter((e) => /Story|Art/i.test(e.role)).map((e) => e.node.name.full).filter((v, i, a) => a.indexOf(v) === i).join(', ') || null;
+
+// -------------------------------------------------------------- Open Library
+// Books. No key needed. https://openlibrary.org/dev/docs/api/search
+export async function openLibrarySearch(q, limit = 5) {
+  const j = await json(`https://openlibrary.org/search.json?limit=${limit}&fields=key,title,author_name,first_publish_year,cover_i,subject,number_of_pages_median&q=${encodeURIComponent(q)}`);
+  return (j.docs || []).map((d) => ({
+    key: d.key,
+    title: d.title,
+    author: (d.author_name || []).slice(0, 2).join(', ') || null,
+    year: d.first_publish_year || null,
+    pages: d.number_of_pages_median || null,
+    subjects: (d.subject || []).slice(0, 12),
+    image: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
+    url: `https://openlibrary.org${d.key}`,
+  }));
+}
+export async function openLibraryWork(key) {
+  const j = await json(`https://openlibrary.org${key}.json`);
+  const desc = typeof j.description === 'string' ? j.description : j.description?.value || '';
+  const cover = j.covers?.find((c) => c > 0);
+  return { description: desc, image: cover ? `https://covers.openlibrary.org/b/id/${cover}-L.jpg` : null };
+}
+export function openLibraryKeyFromUrl(url) {
+  const m = /openlibrary\.org(\/works\/[A-Z0-9]+)/.exec(url || '');
+  return m ? m[1] : null;
 }
 export const anilistImage = (m) => m?.coverImage?.extraLarge || m?.coverImage?.large || null;
 
@@ -131,5 +172,7 @@ export async function downloadImage(url, id) {
 }
 
 export const isAnime = (kind) => /anime|OVA|ONA/i.test(kind || '');
+export const isManga = (kind) => /manga|light novel|webtoon/i.test(kind || '');
+export const isBook = (kind) => /^book/i.test(kind || '');
 export const nextId = (list) => list.reduce((m, x) => Math.max(m, x.id), 0) + 1;
 export const today = () => new Date().toISOString().slice(0, 10);
