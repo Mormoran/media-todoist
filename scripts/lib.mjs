@@ -54,7 +54,17 @@ export async function wikiSearch(q, limit = 5) {
 }
 
 // ------------------------------------------------------------------ AniList
-const ANILIST_FIELDS = `id idMal title { romaji english } coverImage { extraLarge large } seasonYear episodes duration status format genres description(asHtml: false) siteUrl`;
+const ANILIST_FIELDS = `id idMal title { romaji english } coverImage { extraLarge large } seasonYear episodes duration status format genres tags { name rank } description(asHtml: false) siteUrl`;
+
+// Map AniList genres and tags onto our own vocabulary (data/tags.json).
+export const VOCAB = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'tags.json'), 'utf8'));
+export function mapAnilist(media) {
+  const genres = VOCAB.categories.filter((c) => c.anilist.some((a) => (media.genres || []).includes(a))).map((c) => c.id);
+  const names = (media.tags || []).filter((t) => t.rank == null || t.rank >= 40).map((t) => t.name);
+  const tags = VOCAB.tags.filter((t) => t.anilist.some((a) => names.includes(a))).map((t) => t.id);
+  if (!tags.includes('isekai') && /Isekai/.test(names.join(' '))) tags.push('isekai');
+  return { genres, tags };
+}
 async function anilist(query, variables) {
   const j = await json('https://graphql.anilist.co', {
     method: 'POST',

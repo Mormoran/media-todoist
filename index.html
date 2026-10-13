@@ -104,6 +104,14 @@ h1 .neon { background: var(--neon); -webkit-background-clip: text; background-cl
 .chip:hover { color: var(--ink); transform: translateY(-1px); }
 .chip[aria-pressed="true"] { box-shadow: var(--in-s); color: var(--ink); font-weight: 600; position: relative; }
 .chip[aria-pressed="true"]::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--neon); margin-right: 7px; box-shadow: 0 0 8px var(--cyan); vertical-align: 1px; }
+.tagpanel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 18px; padding: 14px 16px; border-radius: 16px; box-shadow: var(--in); max-height: 46vh; overflow: auto; }
+.tg h4 { margin: 0 0 8px; font-family: var(--font-m); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.tg .chips { gap: 5px; }
+.chip.tag { height: 28px; font-size: 12px; padding: 0 10px; }
+.chip.tag i { font-style: normal; font-family: var(--font-m); font-size: 10px; color: var(--faint); margin-left: 5px; }
+.chip.tag[aria-pressed="true"] i { color: var(--cyan-deep); }
+.chip.sel { color: var(--ink); font-weight: 600; }
+.chip.sel::after { content: " ×"; color: var(--mag); }
 .count { margin-left: auto; font-family: var(--font-m); font-size: 11.5px; color: var(--muted); letter-spacing: 0.04em; }
 .count b { color: var(--ink); font-weight: 600; }
 #msg { font-size: 12.5px; color: var(--warn); margin: 10px 4px 0; min-height: 1em; }
@@ -155,6 +163,8 @@ dialog::backdrop { background: rgba(20, 24, 41, 0.42); backdrop-filter: blur(8px
 .badge.unk { color: var(--warn); }
 .badge.adult { color: var(--mag); }
 .badge.chk { color: var(--warn); }
+button.badge.tagb { border: 0; cursor: pointer; color: var(--cyan-deep); text-transform: none; letter-spacing: 0.02em; font-family: var(--font-d); font-size: 12px; font-weight: 500; }
+button.badge.tagb:hover { box-shadow: var(--out-s), var(--glow); }
 .sheet p.syn { margin: 16px 0 0; line-height: 1.6; }
 .sheet p.note { margin: 10px 0 0; font-size: 12.5px; color: var(--warn); }
 .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
@@ -231,6 +241,13 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
       </div>
       <div class="row"><span class="lab">Where</span><div class="chips" id="f-where"></div></div>
       <div class="row"><span class="lab">Type</span><div class="chips" id="f-type"></div></div>
+      <div class="row"><span class="lab">Genre</span><div class="chips" id="f-genre"></div></div>
+      <div class="row"><span class="lab">Tags</span>
+        <button class="chip" id="tagbtn" type="button" aria-expanded="false" aria-controls="tagpanel">Pick tags ▾</button>
+        <div class="chips" id="tagsel"></div>
+        <button class="chip" id="tagclear" type="button" hidden>Clear tags</button>
+      </div>
+      <div class="tagpanel" id="tagpanel" hidden></div>
       <div class="row"><span class="lab">Status</span><div class="chips" id="f-status"></div>
         <button class="chip" id="hide18" type="button" aria-pressed="false" style="margin-left:auto">Hide 18+ and ecchi</button>
       </div>
@@ -269,6 +286,8 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
         <label>Year<span class="field"><input id="a-year" inputmode="numeric" placeholder="2024"></span></label>
         <label>Poster URL<span class="field"><input id="a-poster" placeholder="https://… (optional)"></span></label>
       </div>
+      <label>Tags, comma separated<span class="field"><input id="a-tags" list="taglist" placeholder="aliens, space, heist"></span></label>
+      <datalist id="taglist"></datalist>
       <label>Synopsis<textarea id="a-syn" placeholder="Optional"></textarea></label>
       <label>Note to self<span class="field"><input id="a-note" placeholder="Who recommended it, which season, anything"></span></label>
       <input type="hidden" id="a-url">
@@ -285,7 +304,8 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
   var PRIO = ['', 'High', 'Medium', 'Low'];
   var K_STATE = 'mt-state-v1', K_CUSTOM = 'mt-custom-v1';
   var DATA = [], CUSTOM = [], state = {}, cards = {};
-  var f = { where: 'all', type: 'all', status: 'all', hide18: false, q: '', sort: 'noted' };
+  var VOCAB = { categories: [], groups: [], tags: [] }, TAGLABEL = {};
+  var f = { where: 'all', type: 'all', genre: 'all', tags: [], status: 'all', hide18: false, q: '', sort: 'noted' };
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
   function msg(t) { $('msg').textContent = t || ''; }
@@ -371,6 +391,11 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
     else if (d.availability === 'unknown') b.appendChild(el('span', 'badge unk', 'Not checked'));
     else b.appendChild(el('span', 'badge no', 'Not on your services'));
     (d.genres || []).forEach(function (g) { b.appendChild(el('span', 'badge', g)); });
+    (d.tags || []).forEach(function (t) {
+      var tb = el('button', 'badge tagb', TAGLABEL[t] || t); tb.type = 'button'; tb.title = 'Filter by this tag';
+      tb.addEventListener('click', function () { setTag(t, true); dlg.close(); });
+      b.appendChild(tb);
+    });
     if (d.content === 'adult') b.appendChild(el('span', 'badge adult', '18+'));
     if (d.content === 'ecchi') b.appendChild(el('span', 'badge adult', 'ecchi'));
     if (d.match_confidence === 'low') b.appendChild(el('span', 'badge chk', 'check match'));
@@ -434,6 +459,8 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
     var v = cur(d);
     if (f.hide18 && (d.content === 'adult' || d.content === 'ecchi')) return false;
     if (f.type !== 'all' && group(d) !== f.type) return false;
+    if (f.genre !== 'all' && (d.genres || []).indexOf(f.genre) < 0) return false;
+    if (f.tags.length) { var dt = d.tags || []; for (var i = 0; i < f.tags.length; i++) if (dt.indexOf(f.tags[i]) < 0) return false; }
     if (f.status !== 'all' && v.status !== f.status) return false;
     var sv = d.services || [];
     if (f.where === 'mine' && !sv.length) return false;
@@ -441,7 +468,7 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
     if (f.where === 'unk' && d.availability !== 'unknown') return false;
     if (SERVICES.indexOf(f.where) >= 0 && sv.indexOf(f.where) < 0) return false;
     if (f.q) {
-      var hay = (d.title + ' ' + (d.noted_as || '') + ' ' + (d.genres || []).join(' ') + ' ' + (d.synopsis || '') + ' ' + (d.year || '') + ' ' + (d.kind || '')).toLowerCase();
+      var hay = (d.title + ' ' + (d.noted_as || '') + ' ' + (d.genres || []).join(' ') + ' ' + (d.tags || []).map(function (t) { return TAGLABEL[t] || t; }).join(' ') + ' ' + (d.synopsis || '') + ' ' + (d.year || '') + ' ' + (d.kind || '')).toLowerCase();
       if (hay.indexOf(f.q) < 0) return false;
     }
     return true;
@@ -476,6 +503,50 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
       box.appendChild(b);
     });
   }
+
+  // ------------------------------------------------------------- tag panel
+  function tagCounts() { var c = {}; all().forEach(function (d) { (d.tags || []).forEach(function (t) { c[t] = (c[t] || 0) + 1; }); }); return c; }
+  function buildTags() {
+    var panel = $('tagpanel'); panel.textContent = '';
+    var counts = tagCounts();
+    VOCAB.groups.forEach(function (gname) {
+      var tags = VOCAB.tags.filter(function (t) { return t.group === gname && counts[t.id]; });
+      if (!tags.length) return;
+      var box = el('div', 'tg'); box.appendChild(el('h4', null, gname));
+      var chips = el('div', 'chips');
+      tags.sort(function (a, b) { return counts[b.id] - counts[a.id]; }).forEach(function (t) {
+        var b = el('button', 'chip tag', t.label); b.type = 'button'; b.dataset.tag = t.id;
+        b.setAttribute('aria-pressed', f.tags.indexOf(t.id) >= 0 ? 'true' : 'false');
+        b.appendChild(el('i', null, String(counts[t.id])));
+        b.addEventListener('click', function () { setTag(t.id); });
+        chips.appendChild(b);
+      });
+      box.appendChild(chips); panel.appendChild(box);
+    });
+    var gbox = $('f-genre'); gbox.textContent = '';
+    var gc = {}; all().forEach(function (d) { (d.genres || []).forEach(function (g) { gc[g] = (gc[g] || 0) + 1; }); });
+    var gl = [['all', 'All']].concat(VOCAB.categories.filter(function (c) { return gc[c.id]; }).map(function (c) { return [c.id, c.id]; }));
+    chips('f-genre', gl, 'genre');
+  }
+  function setTag(id, on) {
+    var i = f.tags.indexOf(id);
+    if (on === true && i >= 0) return renderTagSel();
+    if (i >= 0) f.tags.splice(i, 1); else f.tags.push(id);
+    $('tagpanel').querySelectorAll('.chip.tag').forEach(function (b) { b.setAttribute('aria-pressed', f.tags.indexOf(b.dataset.tag) >= 0 ? 'true' : 'false'); });
+    renderTagSel(); render();
+  }
+  function renderTagSel() {
+    var box = $('tagsel'); box.textContent = '';
+    f.tags.forEach(function (t) {
+      var b = el('button', 'chip sel', TAGLABEL[t] || t); b.type = 'button'; b.title = 'Remove';
+      b.addEventListener('click', function () { setTag(t); }); box.appendChild(b);
+    });
+    $('tagclear').hidden = !f.tags.length;
+  }
+  $('tagbtn').addEventListener('click', function () {
+    var p = $('tagpanel'); p.hidden = !p.hidden; this.setAttribute('aria-expanded', String(!p.hidden)); this.textContent = p.hidden ? 'Pick tags ▾' : 'Hide tags ▴';
+  });
+  $('tagclear').addEventListener('click', function () { f.tags = []; buildTags(); renderTagSel(); render(); });
 
   // ------------------------------------------------------------ import/export
   function download(name, obj) {
@@ -513,14 +584,32 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
     return fetch(url, Object.assign({ signal: ctl.signal }, opts || {})).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).finally(function () { clearTimeout(t); });
   }
   function strip(s) { return (s || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); }
+  function mapAnilist(m) {
+    var names = (m.tags || []).filter(function (t) { return t.rank == null || t.rank >= 40; }).map(function (t) { return t.name; });
+    var has = function (list) { return list.some(function (a) { return names.indexOf(a) >= 0; }); };
+    return {
+      genres: VOCAB.categories.filter(function (c) { return c.anilist.some(function (a) { return (m.genres || []).indexOf(a) >= 0; }); }).map(function (c) { return c.id; }),
+      tags: VOCAB.tags.filter(function (t) { return has(t.anilist); }).map(function (t) { return t.id; })
+    };
+  }
+  function parseTags(s) {
+    var ids = VOCAB.tags.map(function (t) { return t.id; }), out = [];
+    (s || '').split(',').forEach(function (x) {
+      x = x.trim().toLowerCase(); if (!x) return;
+      var hit = ids.indexOf(x) >= 0 ? x : (VOCAB.tags.filter(function (t) { return t.label.toLowerCase().indexOf(x) === 0; })[0] || {}).id;
+      if (hit && out.indexOf(hit) < 0) out.push(hit);
+    });
+    return out;
+  }
   function lookupAnime(q) {
     return fetchJson('https://graphql.anilist.co', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ query: 'query($q:String){Page(perPage:6){media(search:$q,type:ANIME,sort:SEARCH_MATCH){idMal siteUrl title{romaji english} coverImage{extraLarge large} seasonYear episodes duration status format genres description(asHtml:false)}}}', variables: { q: q } }) })
-      .then(function (j) { return (j.data.Page.media || []).map(function (m) { return {
+      body: JSON.stringify({ query: 'query($q:String){Page(perPage:6){media(search:$q,type:ANIME,sort:SEARCH_MATCH){idMal siteUrl title{romaji english} coverImage{extraLarge large} seasonYear episodes duration status format genres tags{name rank} description(asHtml:false)}}}', variables: { q: q } }) })
+      .then(function (j) { return (j.data.Page.media || []).map(function (m) { var mp = mapAnilist(m); return {
+        genres: mp.genres, tags: mp.tags,
         title: m.title.english || m.title.romaji, year: m.seasonYear, episodes: m.episodes, runtime_min: m.duration,
         kind: m.format === 'MOVIE' ? 'Anime movie' : /OVA|ONA|SPECIAL/.test(m.format || '') ? 'OVA/ONA' : 'Anime series',
         release_status: m.status === 'FINISHED' ? 'Finished' : m.status === 'RELEASING' ? 'Ongoing' : m.status === 'NOT_YET_RELEASED' ? 'Upcoming' : 'Unknown',
-        genres: m.genres || [], synopsis: strip(m.description).slice(0, 600), poster: m.coverImage.extraLarge || m.coverImage.large,
+        synopsis: strip(m.description).slice(0, 600), poster: m.coverImage.extraLarge || m.coverImage.large,
         url: m.idMal ? 'https://myanimelist.net/anime/' + m.idMal : m.siteUrl, sub: (m.seasonYear || '?') + ' · ' + (m.format || '') + ' · ' + (m.episodes || '?') + ' ep' }; }); });
   }
   function lookupWiki(q, kind) {
@@ -547,6 +636,7 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
         b.addEventListener('click', function () {
           box.querySelectorAll('.res').forEach(function (r) { r.setAttribute('aria-pressed', 'false'); }); b.setAttribute('aria-pressed', 'true');
           picked = h; $('a-title').value = h.title; $('a-year').value = h.year || ''; $('a-poster').value = h.poster || ''; $('a-syn').value = h.synopsis || ''; $('a-url').value = h.url || ''; $('a-kind').value = h.kind;
+          $('a-tags').value = (h.tags || []).join(', ');
         });
         box.appendChild(b);
       });
@@ -558,12 +648,12 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
     var maxId = all().reduce(function (m, x) { return Math.max(m, x.id); }, 9999);
     var d = { id: maxId + 1, title: title, noted_as: title, kind: $('a-kind').value, year: Number($('a-year').value) || null,
       episodes: picked ? picked.episodes || null : null, seasons: null, runtime_min: picked ? picked.runtime_min || null : null,
-      release_status: picked ? picked.release_status || 'Unknown' : 'Unknown', genres: picked ? picked.genres : [], synopsis: $('a-syn').value.trim(),
+      release_status: picked ? picked.release_status || 'Unknown' : 'Unknown', genres: picked ? picked.genres : [], tags: parseTags($('a-tags').value), synopsis: $('a-syn').value.trim(),
       content: 'none', services: [], availability: 'unknown', url: $('a-url').value || null, match_confidence: picked ? 'high' : 'medium',
       notes: $('a-note').value.trim(), probably_watched: false, noted_on: new Date().toISOString().slice(0, 10),
       poster: $('a-poster').value.trim() || null, poster_source: $('a-poster').value.trim() ? 'url' : null, custom: true };
     CUSTOM.push(d); if (save(K_CUSTOM, CUSTOM)) msg('Added ' + d.title + '. It lives in this browser until you export it or add it with the CLI.');
-    adddlg.close(); f.sort = 'added'; $('sort').value = 'added'; stats(); render();
+    adddlg.close(); f.sort = 'added'; $('sort').value = 'added'; buildTags(); renderTagSel(); stats(); render();
     setTimeout(function () { var c = cards[d.id]; if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
   });
 
@@ -576,8 +666,13 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
   $('hide18').addEventListener('click', function () { f.hide18 = !f.hide18; this.setAttribute('aria-pressed', String(f.hide18)); render(); });
   $('asof').textContent = new Date().toLocaleDateString('en-IE', { day: '2-digit', month: 'short', year: 'numeric' });
 
-  fetch('data/watchlist.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function (d) { DATA = d; stats(); render(); })
+  function getJson(u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
+  Promise.all([getJson('data/watchlist.json'), getJson('data/tags.json').catch(function () { return VOCAB; })])
+    .then(function (r) {
+      DATA = r[0]; VOCAB = r[1];
+      VOCAB.tags.forEach(function (t) { TAGLABEL[t.id] = t.label; var o = el('option'); o.value = t.id; o.label = t.label; $('taglist').appendChild(o); });
+      buildTags(); stats(); render();
+    })
     .catch(function () {
       DATA = []; stats(); render();
       msg(location.protocol === 'file:' ? 'Opened as a file, so the browser blocks loading data/watchlist.json. Run "npm start" in the repo and open http://localhost:8080.' : 'Could not load data/watchlist.json.');

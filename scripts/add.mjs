@@ -11,13 +11,15 @@
 import {
   loadList, saveList, nextId, today, isAnime,
   wikiTitleFromUrl, wikiSummary, wikiSearch,
-  anilistSearch, anilistImage, tmdbSearch, downloadImage, TMDB_KEY,
+  anilistSearch, anilistImage, mapAnilist, tmdbSearch, downloadImage, TMDB_KEY, VOCAB,
 } from './lib.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (name, dflt = null) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : dflt);
 const has = (name) => argv.includes(name);
-const VALUE_FLAGS = ['--kind', '--year', '--note', '--pick', '--url'];
+//   --tags "aliens,space"   granular tags from data/tags.json (added to any AniList ones)
+//   --genres "Sci-fi,Drama" categories from data/tags.json
+const VALUE_FLAGS = ['--kind', '--year', '--note', '--pick', '--url', '--tags', '--genres'];
 let title = null;
 for (let i = 0; i < argv.length; i++) {
   if (VALUE_FLAGS.includes(argv[i])) { i++; continue; }
@@ -46,6 +48,7 @@ const entry = {
   runtime_min: null,
   release_status: 'Unknown',
   genres: [],
+  tags: [],
   synopsis: '',
   content: 'none',
   services: [],
@@ -86,7 +89,8 @@ if (has('--manual')) {
       entry.episodes = m.episodes;
       entry.runtime_min = m.duration;
       entry.release_status = m.status === 'FINISHED' ? 'Finished' : m.status === 'RELEASING' ? 'Ongoing' : m.status === 'NOT_YET_RELEASED' ? 'Upcoming' : 'Unknown';
-      entry.genres = m.genres || [];
+      const mapped = mapAnilist(m);
+      entry.genres = mapped.genres; entry.tags = mapped.tags;
       entry.synopsis = stripHtml(m.description).slice(0, 600);
       entry.url = m.idMal ? `https://myanimelist.net/anime/${m.idMal}` : m.siteUrl;
       image = anilistImage(m); source = 'anilist'; matched = true;
@@ -123,6 +127,16 @@ if (has('--manual')) {
     }
   }
   if (!matched) console.log('No match found anywhere. Added as a bare entry; edit data/watchlist.json by hand.');
+}
+
+const splitList = (s) => (s || '').split(',').map((x) => x.trim()).filter(Boolean);
+for (const t of splitList(flag('--tags'))) {
+  if (!VOCAB.tags.some((v) => v.id === t)) { console.error(`Unknown tag "${t}". Known: ${VOCAB.tags.map((v) => v.id).join(', ')}`); process.exit(1); }
+  if (!entry.tags.includes(t)) entry.tags.push(t);
+}
+for (const g of splitList(flag('--genres'))) {
+  if (!VOCAB.categories.some((v) => v.id === g)) { console.error(`Unknown genre "${g}". Known: ${VOCAB.categories.map((v) => v.id).join(', ')}`); process.exit(1); }
+  if (!entry.genres.includes(g)) entry.genres.push(g);
 }
 
 if (image) {

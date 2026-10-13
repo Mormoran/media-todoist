@@ -23,12 +23,17 @@ npm run add -- "Severance" --kind series --note "S2 out"
 npm run add -- "Frieren" --pick 2                     # take the 2nd match instead
 npm run add -- "Thing" --url https://en.wikipedia.org/wiki/Thing
 npm run add -- "Thing" --manual                       # no lookup
+npm run add -- "Alien: Earth" --kind series --tags "aliens,corporate" --genres "Sci-fi,Horror"
 git add -A && git commit -m "add Frieren" && git push
 ```
 
 **On the site**: the **Add** button looks the title up (AniList for anime, Wikipedia otherwise) and stores the entry in your browser. Use **Data → Export my additions** and paste the objects into `data/watchlist.json` to make them permanent. Pushing that file triggers the poster workflow.
 
 **On github.com**: edit `data/watchlist.json` directly. The workflow fetches the poster and commits it.
+
+## Tags
+
+`data/tags.json` holds the vocabulary: 20 genre categories and about 80 granular tags in six groups (setting, creatures, powers, isekai and co, people and plots, tone and origin). Each tag lists the AniList tag names it maps from, so anime added through the CLI or the site's lookup get tagged automatically. Films and series need tags by hand (`--tags` on the CLI, the Tags field on the site, or edit the JSON). Add a new tag by appending to `tags.json`; the site picks it up on reload.
 
 ## Posters
 
@@ -53,7 +58,9 @@ Posters are stored in `posters/<id>.jpg` and shrunk to 500px wide to keep the re
 | `kind` | `Movie`, `TV series`, `Miniseries`, `Anime series`, `Anime movie`, `OVA/ONA`, `Other` |
 | `year`, `episodes`, `seasons`, `runtime_min` | per episode for series |
 | `release_status` | `Finished`, `Ongoing`, `Upcoming`, `Unknown` |
-| `genres`, `synopsis` | |
+| `genres` | broad categories from `data/tags.json` (Sci-fi, Fantasy, Crime, ...) |
+| `tags` | granular tags from `data/tags.json` (aliens, heist, medieval, isekai, cozy, ...). The site filters with AND, so picking "space" and "military" narrows to both. |
+| `synopsis` | |
 | `content` | `none`, `ecchi`, `adult` (the site can hide the last two) |
 | `services`, `availability` | streaming services you subscribe to; `confirmed`, `reported` (news only) or `unknown` |
 | `url` | Wikipedia, MyAnimeList or TMDB page |
