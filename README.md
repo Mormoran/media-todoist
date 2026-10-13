@@ -27,9 +27,19 @@ npm run add -- "Alien: Earth" --kind series --tags "aliens,corporate" --genres "
 git add -A && git commit -m "add Frieren" && git push
 ```
 
-**On the site**: the **Add** button looks the title up (AniList for anime, Wikipedia otherwise). Press **Data → Connect GitHub** once per browser and paste a fine-grained personal access token (only this repo, permission Contents: read and write). From then on additions, removals and your progress commit straight to the repo through the GitHub API, the poster workflow runs, and progress follows you to other devices via `data/progress.json`. Without a token, entries stay in that browser; **Data → Export my additions** or **Push local additions** (after connecting) moves them over.
+**On the site**: sign in with Google, then the **Add** button looks the title up (AniList for anime, Wikipedia otherwise) and writes it to Firestore. Status, priority and rating save there too and sync live to every device you are signed in on. Signed out, the page shows the repo's `data/watchlist.json` read-only.
 
-GitHub Pages serves static files only, so there is no server to write to. The token is the whole backend. It lives in the browser's localStorage, so forget it from the same dialog on a shared machine.
+## Backend: Firebase
+
+GitHub Pages serves static files only, so the data lives in a Firebase project (`media-todoist`) under the same Google account:
+
+- **Auth**: Google sign-in, nothing else enabled.
+- **Firestore**: one document per title at `users/{uid}/titles/{id}`, holding the same fields as `data/watchlist.json` plus `status`, `priority`, `rating`, `updated`. Existing posters point at `https://mormoran.github.io/media-todoist/posters/<id>.jpg`; titles added on the site keep the AniList or Wikipedia image URL.
+- **Rules**: `firestore.rules` in this repo. Only the signed-in owner of a `users/{uid}` subtree can read or write it. Paste it into Firebase console → Firestore → Rules, or `firebase deploy --only firestore:rules`.
+- **Seed**: after the first sign-in the page offers to import the repo list. **Data → Import new titles from the repo** later pulls in anything with an id Firestore does not have yet, so `npm run add` on this machine followed by a push and an Import still works. **Data → Export everything as JSON** downloads the Firestore copy in `watchlist.json` format for backup or to refresh the repo file.
+- **Cost**: Spark plan, free. A page load reads one document per title; the SDK keeps a local cache so repeat loads read only changes.
+
+The `firebaseConfig` block in `index.html` is public by design; the rules are what protect the data.
 
 **On github.com**: edit `data/watchlist.json` directly. The workflow fetches the poster and commits it.
 
@@ -70,6 +80,6 @@ Posters are stored in `posters/<id>.jpg` and shrunk to 500px wide to keep the re
 | `notes`, `probably_watched`, `noted_on` | |
 | `poster`, `poster_source` | local path and where it came from |
 
-Progress (status, priority, rating) is per browser in `localStorage`. **Data → Export my progress** downloads it; **Import** restores it elsewhere.
+Progress (status, priority, rating) lives in Firestore once you sign in. Anything rated in a browser before signing in is carried over by the first Import.
 
 `archive/original-artifact.html` is the Claude artifact this started from.
