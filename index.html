@@ -105,7 +105,8 @@ h1 .neon { background: var(--neon); -webkit-background-clip: text; background-cl
 .chip[aria-pressed="true"] { box-shadow: var(--in-s); color: var(--ink); font-weight: 600; position: relative; }
 .chip[aria-pressed="true"]::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--neon); margin-right: 7px; box-shadow: 0 0 8px var(--cyan); vertical-align: 1px; }
 /* collapsed on scroll: only the search row stays, Filters button reopens the rest */
-.bar { overflow-anchor: none; }
+/* the bar changes height when it folds; without this Chrome scroll anchoring pulls the page back up and re-expands it */
+html { overflow-anchor: none; }
 .bar.compact .bar-in { padding-block: 10px; }
 .bar.compact:not(.open) .row:not(:first-child), .bar.compact:not(.open) .tagpanel { display: none; }
 .bar.compact #filtersbtn { display: inline-flex; }
