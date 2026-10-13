@@ -104,6 +104,14 @@ h1 .neon { background: var(--neon); -webkit-background-clip: text; background-cl
 .chip:hover { color: var(--ink); transform: translateY(-1px); }
 .chip[aria-pressed="true"] { box-shadow: var(--in-s); color: var(--ink); font-weight: 600; position: relative; }
 .chip[aria-pressed="true"]::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--neon); margin-right: 7px; box-shadow: 0 0 8px var(--cyan); vertical-align: 1px; }
+/* collapsed on scroll: only the search row stays, Filters button reopens the rest */
+.bar { overflow-anchor: none; }
+.bar.compact .bar-in { padding-block: 10px; }
+.bar.compact:not(.open) .row:not(:first-child), .bar.compact:not(.open) .tagpanel { display: none; }
+.bar.compact #filtersbtn { display: inline-flex; }
+#filtersbtn i { font-style: normal; font-family: var(--font-m); font-size: 11px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--neon); color: #fff; display: inline-grid; place-items: center; margin-left: 2px; }
+#filtersbtn i:empty { display: none; }
+#filtersbtn[aria-expanded="true"] { box-shadow: var(--in-s); }
 .tagpanel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 18px; padding: 14px 16px; border-radius: 16px; box-shadow: var(--in); max-height: 46vh; overflow: auto; }
 .tg h4 { margin: 0 0 8px; font-family: var(--font-m); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 .tg .chips { gap: 5px; }
@@ -228,7 +236,8 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
 
   <div class="banner" id="banner" hidden></div>
 
-  <div class="bar" role="search">
+  <div id="sentinel" aria-hidden="true"></div>
+  <div class="bar" id="bar" role="search">
     <div class="bar-in">
       <div class="row">
         <label class="field"><span class="sr">Search</span>
@@ -253,6 +262,7 @@ form.add textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; 
         </button>
         <span class="user" id="user" hidden><img id="u-photo" alt=""><span id="u-name"></span><button type="button" id="signout">sign out</button></span>
         <button class="btn" id="morebtn" type="button" aria-expanded="false" aria-controls="morerow">Data</button>
+        <button class="btn" id="filtersbtn" type="button" aria-expanded="false" hidden>Filters</button>
       </div>
       <div class="row"><span class="lab">Where</span><div class="chips" id="f-where"></div></div>
       <div class="row"><span class="lab">Type</span><div class="chips" id="f-type"></div></div>
@@ -535,6 +545,7 @@ function render() {
   const g = $('grid'); g.textContent = ''; g.appendChild(frag);
   $('empty').hidden = vis.length > 0;
   $('count').innerHTML = 'showing <b>' + vis.length + '</b> / ' + L.length;
+  if (typeof fbtnLabel === 'function') fbtnLabel();
 }
 function chips(id, opts, key) {
   const box = $(id); box.textContent = '';
@@ -648,6 +659,25 @@ $('exportbtn').addEventListener('click', () => {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 });
 $('morebtn').addEventListener('click', function () { const r = $('morerow'); r.hidden = !r.hidden; this.setAttribute('aria-expanded', String(!r.hidden)); });
+
+// ---------------------------------------------------- collapse on scroll
+const bar = $('bar'), fbtn = $('filtersbtn');
+function activeFilters() {
+  let n = 0;
+  if (f.where !== 'all') n++; if (f.type !== 'all') n++; if (f.genre !== 'all') n++; if (f.status !== 'all') n++; if (f.hide18) n++;
+  return n + f.tags.length;
+}
+function fbtnLabel() { fbtn.textContent = 'Filters'; const i = el('i', null, activeFilters() ? String(activeFilters()) : ''); fbtn.appendChild(i); }
+function setCompact(on) {
+  if (bar.classList.contains('compact') === on) return;
+  bar.classList.toggle('compact', on); bar.classList.remove('open'); fbtn.hidden = !on; fbtn.setAttribute('aria-expanded', 'false');
+  if (on) { const p = $('tagpanel'); if (!p.hidden) $('tagbtn').click(); }
+}
+fbtn.addEventListener('click', () => { const open = bar.classList.toggle('open'); fbtn.setAttribute('aria-expanded', String(open)); });
+new IntersectionObserver((entries) => setCompact(!entries[0].isIntersecting), { rootMargin: '-1px 0px 0px 0px' }).observe($('sentinel'));
+// stays open while you pick filters; folds again when you open a title or press Filters
+function foldFilters() { if (bar.classList.contains('open')) { bar.classList.remove('open'); fbtn.setAttribute('aria-expanded', 'false'); } }
+$('grid').addEventListener('click', foldFilters);
 
 // -------------------------------------------------------------------- add
 const adddlg = $('adddlg'); let picked = null;
